@@ -1,0 +1,132 @@
+blockchain = include_lib("/lib/blockchain.so")
+
+socket = {}
+socket.classID = "scoket"
+
+socket.ack = "00"
+socket.seq = "00"
+socket.flag = "S" // "A", "T"
+socket.sid = "00000" // sid
+socket.last_received = ""
+//socket.socket_file = get_shell.host_computer.File("/root/asocket")
+//if not socket.socket_file then exit "File not found"
+socket.coinName = "1337coin"
+socket.cuser = "user"
+socket.cpass = "pass"
+socket.coin = blockchain.get_coin(socket.coinName,socket.cuser,socket.cpass)
+socket.host = socket.coin.get_subwallet(user_input("Enter Your subwallet name:> "))
+socket.peer = socket.coin.get_subwallet(user_input("Enter Your peer subawallet:> "))
+socket.last_sent = ""
+socket.last_received = ""
+
+socket.up_seq = function(s)
+	s = s.to_int
+	if s >= 99 then s = -1
+	s = str(s + 1)
+	if s.len < 2 then s = "0"+s
+	return s
+end function
+
+socket.pad = function(t)
+	while t.len < 16 
+		t = t + " "
+	end while
+	return t
+end function
+
+socket.send = function(flag,msg)
+	// send stuff
+	// set_content
+	packet = socket.sid
+	packet = packet + flag
+	packet = packet + socket.seq
+	packet = packet + socket.ack
+	packet = packet + "16" // payload length
+	packet = packet + socket.pad(msg)
+	packet = packet + socket.nickname+"EOP"
+	
+	//socket.socket_file.set_content( packet )
+	socket.host.set_info(packet)
+	
+	if flag == "S" then return null else socket.seq = socket.up_seq(socket.seq)
+	socket.flag = flag
+	if socket.flag == "T" then socket.mode = "q"
+	return null
+end function
+
+socket.receive = function(subwallet)
+	// get_content
+	//raw = socket.socket_file.get_content
+	raw = subwallet.get_info
+	if subwallet.get_user == socket.host.get_user then
+		if raw == socket.last_sent then return null 
+		socket.last_sent = raw
+	else 
+		if raw == socket.last_received then return null
+		socket.last_received = raw
+	end if
+	
+	data = {}
+	data.sid = raw[:5]
+	
+	if data.sid != socket.sid then return null // drop unowned packets
+	
+	data.flag = raw[5:6]
+	
+	if data.flag == "T" then socket.mode = "q"
+
+	data.seq = raw[6:8]
+	data.ack = raw[8:10]
+	data.pl = raw[10:12]
+	data.text = raw[12:28]
+	data.nickname = raw[28:raw.indexOf("EOP")]
+	socket.ack = data.seq
+	return data // as a map
+end function
+
+
+
+socket.mode = ""
+/////////////UI////////////
+print("pubsocket v 0.2",1)
+while socket.mode.lower != "s" and socket.mode.lower != "r" and socket.mode.lower != "q"
+	socket.mode = user_input("Select a mode: "+char(10)+"[<b>S</b>] Send"+char(10)+"[<b>R</b>] Receive"+char(10)+"[<b>q</b>] quit"+char(10)+":> ")
+end while
+if socket.mode == "q" then exit "goodbye"
+
+socket.nickname = user_input("Please enter a nickname: " )
+socket.sid = user_input("Enter a socket ID: ")// 
+
+while socket.sid.len < 5
+	socket.sid = socket.sid + "0"
+	socket.sid = socket.sid[:5]
+end while
+
+while socket.mode == "s"
+	msg = user_input("Send message:> ")
+	if msg == "/quit" then socket.send("T","") else socket.send("A",msg)
+	wait 1
+end while
+
+while socket.mode == "r"
+	//print socket.receive
+	msg = socket.receive(socket.host)
+	if msg != null then print "["+msg.nickname+"] "+msg.text
+	msg = socket.receive(socket.peer)
+	if msg != null then print "["+msg.nickname+"] "+msg.text
+	wait .25
+end while
+
+exit "socket closed"
+	
+	
+	
+	
+	
+	
+
+
+
+
+
+
